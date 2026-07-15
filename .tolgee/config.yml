@@ -1,0 +1,5 @@
+projectId: 33261
+apiUrl: https://app.tolgee.io
+files:
+  - source: app/src/main/res/values/strings.xml
+    path: app/src/main/res/values-{androidLanguageTag}/strings.xml
