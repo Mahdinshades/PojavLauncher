@@ -1,35 +1,55 @@
-name: Translate CI
+name: Tolgee Manual Auto-Translate Pipeline
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["v3_openjdk"]
-    paths:
-      - "**/strings.xml"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  translateAndroid:
+  translate-and-merge:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Translate strings.xml to supported languages
-        uses: ashishb/android-auto-translate@master
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+      - name: Checkout v3_openjdk branch
+        uses: actions/checkout@v4
         with:
-          committer: "Translation Bot <noreply@github.com>"
-          title: "[Bot] Auto-generated translations for non-English languages"
-          body: "Auto-generated translations by android-auto-translate bot"
+          ref: v3_openjdk
+
+      - name: Install Tolgee CLI
+        run: npm install -g @tolgee/cli
+
+      - name: Push source strings to Tolgee
+        run: tolgee push
+        env:
+          TOLGEE_API_KEY: ${{ secrets.TOLGEE_API_KEY }}
+
+      - name: Pull latest translations from Tolgee
+        run: tolgee pull
+        env:
+          TOLGEE_API_KEY: ${{ secrets.TOLGEE_API_KEY }}
+
+      - name: Create Branch and Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update automated translations from Tolgee"
+          branch: tolgee-auto-translations
+          title: "Automated Translation Update (Tolgee)"
+          body: |
+            This is an automated PR containing updated translation files pulled directly from Tolgee.
+            It was manually triggered via workflow_dispatch.
+          base: v3_openjdk
+          author: "Tolgee Bot <tolgee-bot@noreply.github.com>"
+          committer: "Tolgee Bot <tolgee-bot@noreply.github.com>"
+
+      - name: Merge PR to v3_openjdk
+        if: steps.create-pr.outputs.pull-request-number != ''
+        run: |
+          echo "PR #${{ steps.create-pr.outputs.pull-request-number }} created successfully."
+          echo "Merging PR and deleting temporary branch..."
+          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} --merge --delete-branch
